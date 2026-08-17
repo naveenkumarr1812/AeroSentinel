@@ -1,0 +1,13 @@
+AeroSentinel Emergency Response SOP
+
+Potential security incidents must be classified by risk.
+
+Low-risk detections may be logged without immediate escalation.
+
+Medium-risk detections require human approval before an incident response.
+
+High-risk detections should immediately notify the designated security operator and request human confirmation before consequential physical actions.
+
+If communication with the operator is unavailable, the drone should prioritize safety and return home.
+
+The system must maintain an auditable record of significant incidents and operator decisions.

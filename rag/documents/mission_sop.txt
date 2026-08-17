@@ -1,0 +1,18 @@
+AeroSentinel Mission Operations SOP
+
+Every autonomous mission follows these stages:
+
+1. Understand the mission objective.
+2. Select an available drone.
+3. Perform pre-flight safety checks.
+4. Navigate to the authorized mission location.
+5. Capture visual data.
+6. Analyze the captured data using the vision system.
+7. Assess the detected risk.
+8. Request human approval when required.
+9. Execute the approved response.
+10. Return the drone safely to its home location.
+
+Autonomous actions must not bypass safety checks.
+
+If a mission cannot be completed safely, the drone should return home.

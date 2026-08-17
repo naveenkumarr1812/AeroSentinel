@@ -1,0 +1,15 @@
+AeroSentinel Perimeter Security SOP
+
+North perimeter, south perimeter, and east gate are authorized inspection zones.
+
+The north perimeter is considered a restricted security area.
+
+Person detection near a restricted perimeter should be treated as a potential security incident.
+
+Visual confirmation is required before escalating a suspected intrusion.
+
+Medium-risk detections require human review before an incident response is executed.
+
+High-confidence detections should be presented to the human operator with the image analysis evidence.
+
+The drone must not enter areas outside the configured geofence.

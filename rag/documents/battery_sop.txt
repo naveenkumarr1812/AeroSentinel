@@ -1,0 +1,13 @@
+AeroSentinel Battery Safety SOP
+
+Drone missions must maintain sufficient battery reserve.
+
+Minimum battery for mission launch: 30%.
+
+If battery is below 30%, the mission must not be launched.
+
+For missions involving long-distance inspection, the preferred battery level is 50% or higher.
+
+If battery falls below the safe operational threshold during a mission, the drone should terminate the mission and return to its home location.
+
+The safety system must prioritize safe return over mission completion.

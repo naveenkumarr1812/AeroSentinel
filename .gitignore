@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+venv/
+.venv/
+ENV/
+env/
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Local environment secrets
+.env
+.env.*
+!.env.example
+
+# Streamlit / local app data
+.streamlit/
+
+# Generated runtime artifacts
+*.log
+*.sqlite3
+*.db
+
+# Project-specific generated embeddings/indexes
+rag/vectorstore/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
