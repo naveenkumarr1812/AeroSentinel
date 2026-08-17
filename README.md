@@ -16,7 +16,6 @@ The project combines:
 ## Project structure
 
 - `app.py` — main Streamlit mission console UI
-- `run_mission.py` — terminal-based mission runner for interactive approvals
 - `agents/` — autonomous system agents for command, safety, fleet, memory, and vision
 - `graph/` — LangGraph workflow and state definitions
 - `simulator/` — mock drone and fleet logic
@@ -68,4 +67,4 @@ Do not commit your `.env` file. It is ignored by git.
 
 ## License
 
-This project is currently unlicensed. Add a license file if you plan to publish it publicly.
+This project is licensed under the MIT License. See the [LICENCE](LICENCE) file for the full text.
