@@ -16,6 +16,7 @@ The project combines:
 ## Project structure
 
 - `app.py` — main Streamlit mission console UI
+- `run_mission.py` — terminal-based mission runner for interactive approvals
 - `agents/` — autonomous system agents for command, safety, fleet, memory, and vision
 - `graph/` — LangGraph workflow and state definitions
 - `simulator/` — mock drone and fleet logic
