@@ -41,6 +41,11 @@ class MissionState(TypedDict, total=False):
     # is index 0.
     recapture_count: int
 
+    # True if the most recent recapture attempt itself failed (e.g. an
+    # image file went missing mid-mission) — routes straight to a
+    # safe return instead of silently re-analyzing a stale photo.
+    recapture_failed: bool
+
     # Vision (most recent capture only)
     vision_result: dict[str, Any]
     incident_detected: bool

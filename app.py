@@ -1,7 +1,9 @@
 import streamlit as st
+import uuid
+from datetime import datetime
 from langgraph.types import Command
 
-from graph.workflow import graph, fleet, vision_analyzer
+from graph.workflow import graph, fleet, vision_analyzer, memory_agent
 
 
 # ============================================================
@@ -485,20 +487,18 @@ st.markdown(
         font-size: 12.5px !important;
     }
 
-    /* ---------- fleet roster grid ---------- */
-
-    .rt-fleet-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-        gap: 12px;
-    }
+    /* ---------- fleet roster (now rendered per-column, not a CSS grid) ---------- */
 
     .rt-fleet-card {
         position: relative;
         border: 1px solid var(--border);
         background: var(--bg-panel);
-        border-radius: 3px;
-        padding: 14px 16px;
+        border-radius: 4px;
+        padding: 20px 20px;
+        min-height: 168px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
         transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
 
@@ -512,45 +512,47 @@ st.markdown(
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 10px;
+        margin-bottom: 14px;
+        gap: 10px;
     }
 
     .rt-fleet-name {
         font-family: 'Chakra Petch', sans-serif;
         font-weight: 700;
-        font-size: 13.5px;
-        letter-spacing: 0.03em;
+        font-size: 16px;
+        letter-spacing: 0.02em;
         color: var(--text);
+        white-space: nowrap;
     }
 
     .rt-fleet-badge {
         font-family: 'Chakra Petch', sans-serif;
-        font-size: 9.5px;
+        font-size: 10.5px;
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        padding: 3px 8px;
-        border-radius: 10px;
+        padding: 4px 11px;
+        border-radius: 12px;
         white-space: nowrap;
     }
 
     .rt-fleet-meta {
-        font-size: 11px;
+        font-size: 12.5px;
         color: var(--text-dim);
         letter-spacing: 0.03em;
-        margin-bottom: 10px;
+        margin-bottom: 14px;
     }
 
     .rt-fleet-battery-row {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
     }
 
     .rt-fleet-battery-track {
         flex: 1;
-        height: 5px;
-        border-radius: 3px;
+        height: 7px;
+        border-radius: 4px;
         background: var(--bg-panel-alt);
         border: 1px solid var(--border);
         overflow: hidden;
@@ -558,14 +560,88 @@ st.markdown(
 
     .rt-fleet-battery-fill {
         height: 100%;
-        border-radius: 3px;
+        border-radius: 4px;
     }
 
     .rt-fleet-battery-pct {
-        font-size: 11px;
+        font-size: 12.5px;
         color: var(--text-dim);
-        min-width: 32px;
+        min-width: 36px;
         text-align: right;
+    }
+
+    /* ---------- inspection zones ---------- */
+
+    .rt-zone-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+    }
+
+    @media (max-width: 700px) {
+        .rt-zone-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    .rt-zone-card {
+        border: 1px solid var(--border);
+        background: var(--bg-panel);
+        border-radius: 5px;
+        padding: 28px 16px;
+        min-height: 120px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+
+    .rt-zone-card.zone-active {
+        border-color: var(--cyan);
+        background: var(--cyan-dim);
+        box-shadow: 0 0 18px rgba(79, 224, 216, 0.25);
+    }
+
+    .rt-zone-icon {
+        font-size: 40px;
+        margin-bottom: 12px;
+        line-height: 1;
+    }
+
+    .rt-zone-label {
+        font-family: 'Chakra Petch', sans-serif;
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text);
+    }
+
+    .rt-zone-card.zone-active .rt-zone-label {
+        color: var(--cyan);
+    }
+
+    /* ---------- image chat: bounded, independently scrollable ---------- */
+
+    .rt-chat-scroll {
+        max-height: 420px;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        background: var(--bg-panel);
+        border-radius: 3px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+    }
+
+    .rt-chat-scroll::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .rt-chat-scroll::-webkit-scrollbar-thumb {
+        background: var(--border-active);
+        border-radius: 3px;
     }
 
     </style>
@@ -649,58 +725,164 @@ def get_fleet(state):
 _FLEET_STATUS_STYLES = {
     "flying": ("IN FLIGHT", "var(--green)", "var(--green-dim)"),
     "returning": ("RETURNING", "var(--amber)", "var(--amber-dim)"),
-    "landed": ("LANDED", "var(--cyan)", "var(--cyan-dim)"),
+    "landed": ("LANDED", "var(--amber)", "var(--amber-dim)"),
     "available": ("AVAILABLE", "var(--cyan)", "var(--cyan-dim)"),
     "busy": ("BUSY", "var(--red)", "var(--red-dim)"),
     "charging": ("CHARGING", "var(--amber)", "var(--amber-dim)"),
 }
 
+# Friendly callsigns for display only — backend drone IDs (D1/D2/D3)
+# stay exactly as-is everywhere in the agents/graph, so nothing about
+# fleet selection, safety checks, or memory records changes.
+DRONE_CALLSIGNS = {
+    "D1": "Falcon",
+    "D2": "Raven",
+    "D3": "Kestrel",
+}
+
+
+def drone_display_name(drone_id):
+    callsign = DRONE_CALLSIGNS.get(drone_id)
+    return f"{callsign} · {drone_id}" if callsign else drone_id
+
 
 def render_fleet(state):
     fleet_rows = get_fleet(state)
 
-    cards = []
+    if not fleet_rows:
+        return
 
-    for drone in fleet_rows:
-        status = str(drone.get("status", "available")).lower()
-        label, color, bg = _FLEET_STATUS_STYLES.get(status, _FLEET_STATUS_STYLES["available"])
-        is_assigned = bool(drone.get("assigned"))
+    cols = st.columns(len(fleet_rows))
 
-        battery = drone.get("battery")
-        battery = 0 if battery is None else max(0, min(100, battery))
+    for col, drone in zip(cols, fleet_rows):
+        with col:
+            status = str(drone.get("status", "available")).lower()
+            label, color, bg = _FLEET_STATUS_STYLES.get(status, _FLEET_STATUS_STYLES["available"])
+            is_assigned = bool(drone.get("assigned"))
 
-        if battery >= 60:
-            batt_color = "var(--green)"
-        elif battery >= 30:
-            batt_color = "var(--amber)"
-        else:
-            batt_color = "var(--red)"
+            battery = drone.get("battery")
+            battery = 0 if battery is None else max(0, min(100, battery))
 
-        dot = (
-            '<span class="dot dot-pulse" style="background: var(--green); margin-right:2px;"></span>'
-            if is_assigned
-            else ""
-        )
+            if battery >= 60:
+                batt_color = "var(--green)"
+            elif battery >= 30:
+                batt_color = "var(--amber)"
+            else:
+                batt_color = "var(--red)"
 
-        cards.append(
-            f"""
-            <div class="rt-fleet-card {'fleet-active' if is_assigned else ''}">
-                <div class="rt-fleet-top">
-                    <div class="rt-fleet-name">{drone.get('id', 'UNKNOWN')}</div>
-                    <div class="rt-fleet-badge" style="color: {color}; background: {bg}; border: 1px solid {color};">{dot}{label}</div>
-                </div>
-                <div class="rt-fleet-meta">📍 {drone.get('location', 'base')}</div>
-                <div class="rt-fleet-battery-row">
-                    <div class="rt-fleet-battery-track">
-                        <div class="rt-fleet-battery-fill" style="width: {battery}%; background: {batt_color};"></div>
+            dot = (
+                '<span class="dot dot-pulse" style="background: var(--green); margin-right:2px;"></span>'
+                if is_assigned
+                else ""
+            )
+
+            display_name = drone_display_name(drone.get("id", "UNKNOWN"))
+
+            render_html(
+                f"""
+                <div class="rt-fleet-card {'fleet-active' if is_assigned else ''}">
+                    <div>
+                        <div class="rt-fleet-top">
+                            <div class="rt-fleet-name">{display_name}</div>
+                            <div class="rt-fleet-badge" style="color: {color}; background: {bg}; border: 1px solid {color};">{dot}{label}</div>
+                        </div>
+                        <div class="rt-fleet-meta">📍 {drone.get('location', 'base')}</div>
                     </div>
-                    <div class="rt-fleet-battery-pct">{battery}%</div>
+                    <div class="rt-fleet-battery-row">
+                        <div class="rt-fleet-battery-track">
+                            <div class="rt-fleet-battery-fill" style="width: {battery}%; background: {batt_color};"></div>
+                        </div>
+                        <div class="rt-fleet-battery-pct">{battery}%</div>
+                    </div>
                 </div>
-            </div>
-            """
-        )
+                """
+            )
 
-    render_html(f'<div class="rt-fleet-grid">{"".join(cards)}</div>')
+            # Only offer charging while the drone is at base, not
+            # mid-mission (busy/flying/returning don't get a button).
+            can_charge = (
+                status not in ("flying", "returning", "busy")
+                and drone.get("location", "base") == "base"
+                and (battery < 100 or status == "charging")
+            )
+
+            if can_charge:
+                is_charging = status == "charging"
+
+                if st.button(
+                    "⚡ Stop Charging" if is_charging else "⚡ Charge",
+                    key=f"charge_{drone.get('id')}",
+                    use_container_width=True,
+                ):
+                    target = fleet.get_drone(drone.get("id"))
+                    if target:
+                        if is_charging:
+                            target.stop_charging()
+                        else:
+                            target.start_charging()
+                    st.rerun()
+
+
+INSPECTION_ZONES = [
+    ("🚧", "North Gate", "north_gate"),
+    ("🌾", "Ground Area", "ground_area"),
+    ("🚪", "Main Gate", "main_gate"),
+    ("🏭", "Warehouse", "warehouse"),
+]
+
+
+def render_inspection_zones(current_location=None):
+    cards = "".join(
+        f"""
+        <div class="rt-zone-card {'zone-active' if slug == current_location else ''}">
+            <div class="rt-zone-icon">{icon}</div>
+            <div class="rt-zone-label">{label}</div>
+        </div>
+        """
+        for icon, label, slug in INSPECTION_ZONES
+    )
+    render_html(f'<div class="rt-zone-grid">{cards}</div>')
+
+
+def format_mission_label(timestamp_str):
+    """Turns an ISO timestamp into 'Mission <date> · <time>'."""
+    try:
+        dt = datetime.fromisoformat(timestamp_str)
+        return f"Mission {dt.strftime('%b %d, %Y · %I:%M %p')}"
+    except (TypeError, ValueError):
+        return "Mission"
+
+
+def render_sidebar_mission_history():
+    """
+    Recent missions across every location, always shown in the
+    sidebar — home screen and active mission alike — with a delete
+    button per entry. Reads straight from missions.json on every
+    rerun (via memory_agent), so a new mission finishing or a delete
+    click shows up instantly without any extra wiring.
+    """
+    missions = memory_agent.memory.get_recent(limit=10)
+
+    if not missions:
+        return
+
+    render_html('<div class="rt-eyebrow" style="margin-top: 22px;">Previous Missions</div>')
+
+    for mission_item in reversed(missions):
+        mission_id = mission_item.get("mission_id", "")
+        label = format_mission_label(mission_item.get("timestamp", ""))
+
+        with st.expander(label):
+            st.write("**Location:**", mission_item.get("location"))
+            st.write("**Drone:**", mission_item.get("drone_id"))
+            st.write("**Detection:**", mission_item.get("detection"))
+            st.write("**Risk:**", mission_item.get("risk_level"))
+            st.write("**Confidence:**", mission_item.get("confidence"))
+            st.write("**Human Decision:**", mission_item.get("human_decision"))
+
+            if st.button("🗑  Delete", key=f"delete_mission_{mission_id}", use_container_width=True):
+                memory_agent.delete_mission(mission_id)
+                st.rerun()
 
 
 def alert_panel(title, body, tone="cyan"):
@@ -776,32 +958,54 @@ def render_image_chat(image_path):
             """
             for qa in history
         )
-        render_html(f'<div class="rt-panel" style="padding:12px 14px; margin-bottom:10px;">{chat_html}</div>')
+        # Bounded + independently scrollable, so a long Q&A history
+        # never pushes the input/button below the image column — it
+        # scrolls within its own box instead of growing the page.
+        render_html(f'<div class="rt-chat-scroll">{chat_html}</div>')
 
     # A stable, image-specific key so each photo keeps its own input
     # box and doesn't leak text between different captured images.
     widget_key = str(abs(hash(image_path)))
 
-    question = st.text_input(
-        "Ask a question about this image",
-        key=f"image_question_{widget_key}",
-        placeholder="e.g. What color is the vehicle?",
-        label_visibility="collapsed",
-    )
+    # Streamlit text_inputs keep whatever the user typed across
+    # reruns as long as their key stays the same. To make the box go
+    # back to empty right after a question is asked, the key includes
+    # a per-image counter that bumps on every submit — Streamlit then
+    # treats it as a brand-new (empty) widget on the next render.
+    counter_key = f"chat_counter_{widget_key}"
+    if counter_key not in st.session_state:
+        st.session_state[counter_key] = 0
 
-    ask_clicked = st.button(
-        "Ask",
-        key=f"ask_button_{widget_key}",
-        use_container_width=True,
-    )
+    input_key = f"image_question_{widget_key}_{st.session_state[counter_key]}"
 
-    if ask_clicked and question.strip():
-        with st.spinner("Analyzing..."):
-            answer = vision_analyzer.ask_about_image(image_path, question.strip())
-
+    def _submit_question():
+        q = st.session_state.get(input_key, "").strip()
+        if not q:
+            return
+        answer = vision_analyzer.ask_about_image(image_path, q)
         st.session_state.image_chat_history.setdefault(image_path, []).append(
-            {"question": question.strip(), "answer": answer}
+            {"question": q, "answer": answer}
         )
+        st.session_state[counter_key] += 1
+
+    # on_change fires when the user presses Enter (or clicks away)
+    # inside the text input, so Enter submits the question the same
+    # way the button does.
+    st.text_input(
+        "Ask a question about this image",
+        key=input_key,
+        placeholder="e.g. What is in the image?",
+        label_visibility="collapsed",
+        on_change=_submit_question,
+    )
+
+    if st.button(
+        "Ask",
+        key=f"ask_button_{widget_key}_{st.session_state[counter_key]}",
+        use_container_width=True,
+    ):
+        with st.spinner("Analyzing..."):
+            _submit_question()
         st.rerun()
 
 
@@ -876,7 +1080,7 @@ with st.sidebar:
 
     mission = st.text_area(
         "Mission Request",
-        value="Inspect the north perimeter for intrusions",
+        value="Inspect the ground area for intrusions",
         height=100,
     )
 
@@ -893,6 +1097,8 @@ with st.sidebar:
         """
     )
 
+    render_sidebar_mission_history()
+
 
 # ============================================================
 # RESET
@@ -905,7 +1111,7 @@ if reset_button:
     st.session_state.interrupt_type = None
     st.session_state.interrupt_payload = {}
     st.session_state.image_chat_history = {}
-    st.session_state.thread_id = f"aerosentinel-{id(st)}"
+    st.session_state.thread_id = f"aerosentinel-{uuid.uuid4().hex}"
     st.rerun()
 
 
@@ -920,7 +1126,7 @@ if start_button:
     st.session_state.interrupt_payload = {}
     st.session_state.image_chat_history = {}
     st.session_state.mission_state = {}
-    st.session_state.thread_id = f"aerosentinel-{id(st)}"
+    st.session_state.thread_id = f"aerosentinel-{uuid.uuid4().hex}"
 
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
     initial_state = {"user_request": mission}
@@ -970,6 +1176,10 @@ if not st.session_state.mission_started:
         </div>
         """
     )
+
+    eyebrow("Inspection Zones")
+
+    render_inspection_zones()
 
     eyebrow("Fleet Status")
 
@@ -1023,6 +1233,10 @@ col1, col2, col3 = st.columns(3)
 stat_card(col1, "Mission Type", state.get("mission_type", "Processing…"))
 stat_card(col2, "Location", state.get("location", "Processing…"))
 stat_card(col3, "Priority", state.get("priority", "Processing…"))
+
+render_html("<div style='height: 12px;'></div>")
+
+render_inspection_zones(current_location=state.get("location"))
 
 
 # ============================================================
@@ -1091,32 +1305,6 @@ if rag_context:
     for result in rag_context:
         with st.expander(f"📄  {result.get('source', 'Unknown Source')}"):
             st.write(result.get("content", ""))
-
-
-# ============================================================
-# MISSION MEMORY
-# ============================================================
-
-history = state.get("mission_history", [])
-
-if history:
-
-    eyebrow("Previous Mission Memory")
-
-    for mission_item in history:
-        with st.expander(f"Mission {mission_item.get('mission_id', '')[:8]}"):
-
-            memory_col1, memory_col2 = st.columns(2)
-
-            with memory_col1:
-                st.write("**Location:**", mission_item.get("location"))
-                st.write("**Drone:**", mission_item.get("drone_id"))
-                st.write("**Detection:**", mission_item.get("detection"))
-
-            with memory_col2:
-                st.write("**Risk:**", mission_item.get("risk_level"))
-                st.write("**Confidence:**", mission_item.get("confidence"))
-                st.write("**Human Decision:**", mission_item.get("human_decision"))
 
 
 # ============================================================
@@ -1242,18 +1430,11 @@ if st.session_state.interrupt_type == "launch_approval_required":
     with launch_col2:
         reject_launch = st.button("❌  KEEP GROUNDED", use_container_width=True)
 
-    launch_reason = st.text_input(
-        "Decision reason",
-        value="",
-        placeholder="Example: Cleared for takeoff",
-        key="launch_reason_input",
-    )
-
     if approve_launch:
-        resume_graph("approve", launch_reason.strip() or "Launch approved by operator.")
+        resume_graph("approve", "Launch approved by operator.")
 
     if reject_launch:
-        resume_graph("reject", launch_reason.strip() or "Launch withheld by operator.")
+        resume_graph("reject", "Launch withheld by operator.")
 
 
 # ---------- Checkpoint 2: Photo Review (after every capture) ----------
@@ -1303,18 +1484,11 @@ if st.session_state.interrupt_type == "photo_review_required":
     with review_col2:
         return_home = st.button("🏠  RETURN HOME", use_container_width=True)
 
-    review_reason = st.text_input(
-        "Decision reason",
-        value="",
-        placeholder="Example: Need a clearer angle",
-        key="photo_review_reason_input",
-    )
-
     if take_more:
-        resume_graph("recapture", review_reason.strip() or "Requested another photo.")
+        resume_graph("recapture", "Requested another photo.")
 
     if return_home:
-        resume_graph("return", review_reason.strip() or "Returning drone home.")
+        resume_graph("return", "Returning drone home.")
 
 
 # ============================================================

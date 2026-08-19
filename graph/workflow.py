@@ -85,6 +85,15 @@ vision_analyzer = VisionAnalyzer()
 def commander_node(state: MissionState):
     result = commander.understand_mission(state["user_request"])
 
+    if result.get("error") or not result.get("location") or not result.get("mission_type"):
+        return {
+            "safety_status": "REJECTED",
+            "safety_reason": (
+                "Could not understand the mission request: "
+                f"{result.get('error', 'no valid mission type/location returned')}."
+            ),
+        }
+
     return {
         "mission_type": result["mission_type"],
         "location": result["location"],
@@ -92,15 +101,29 @@ def commander_node(state: MissionState):
     }
 
 
+def commander_router(state: MissionState):
+    if state.get("mission_type") and state.get("location"):
+        return "rag"
+    return "finish"
+
+
 # ============================================================
 # NODE: RAG RETRIEVAL
 # ============================================================
 
 def rag_node(state: MissionState):
-    results = rag_agent.retrieve_mission_knowledge(
-        mission=state["mission_type"],
-        location=state["location"],
-    )
+    # A transient embedding/ChromaDB hiccup shouldn't take down the
+    # whole mission — the safety agent already handles a missing RAG
+    # context gracefully (it just logs a warning and proceeds), so
+    # falling back to an empty list here is safe.
+    try:
+        results = rag_agent.retrieve_mission_knowledge(
+            mission=state["mission_type"],
+            location=state["location"],
+        )
+    except Exception as e:
+        print(f"\nRAG AGENT: retrieval failed, continuing without SOP context ({e})")
+        results = []
 
     return {"rag_context": results}
 
@@ -110,7 +133,11 @@ def rag_node(state: MissionState):
 # ============================================================
 
 def memory_node(state: MissionState):
-    history = memory_agent.retrieve_history(location=state["location"])
+    try:
+        history = memory_agent.retrieve_history(location=state["location"])
+    except Exception as e:
+        print(f"\nMEMORY AGENT: history lookup failed, continuing without it ({e})")
+        history = []
 
     return {"mission_history": history}
 
@@ -134,6 +161,12 @@ def fleet_node(state: MissionState):
         "assigned_drone": result["drone_id"],
         "drone_battery": drone.battery,
     }
+
+
+def fleet_router(state: MissionState):
+    if state.get("assigned_drone"):
+        return "safety"
+    return "finish"
 
 
 # ============================================================
@@ -243,6 +276,12 @@ def drone_node(state: MissionState):
     }
 
 
+def drone_router(state: MissionState):
+    if state.get("image_path"):
+        return "vision"
+    return "finish"
+
+
 # ============================================================
 # NODE: RECAPTURE  (another photo — no re-launch, drone stays flying)
 # ============================================================
@@ -251,12 +290,7 @@ def recapture_node(state: MissionState):
     drone = fleet.get_drone(state["assigned_drone"])
 
     if not drone:
-        return {
-            "final_report": (
-                f"\nUnable to recapture: drone "
-                f"{state.get('assigned_drone')} not found.\n"
-            )
-        }
+        return {"recapture_failed": True}
 
     next_index = state.get("recapture_count", 0) + 1
 
@@ -264,14 +298,23 @@ def recapture_node(state: MissionState):
 
     if not result["success"]:
         # photo_review_router already checks total_photos before
-        # routing here, so this should be rare — treat it as a safe
-        # no-op rather than crashing the run.
-        return {"recapture_count": state.get("recapture_count", 0)}
+        # routing here, so this should be rare (e.g. an image file
+        # was deleted mid-mission). Rather than silently re-analyzing
+        # the previous photo again as if nothing happened, flag it so
+        # the router below sends the drone straight home instead.
+        return {"recapture_failed": True}
 
     return {
         "image_path": result["image_path"],
         "recapture_count": next_index,
+        "recapture_failed": False,
     }
+
+
+def recapture_router(state: MissionState):
+    if state.get("recapture_failed"):
+        return "return_home"
+    return "vision"
 
 
 # ============================================================
@@ -445,10 +488,27 @@ builder.add_node("return_home", return_home_node)
 builder.add_node("finish", finish_node)
 
 builder.add_edge(START, "commander")
-builder.add_edge("commander", "rag")
+
+builder.add_conditional_edges(
+    "commander",
+    commander_router,
+    {
+        "rag": "rag",
+        "finish": "finish",
+    },
+)
+
 builder.add_edge("rag", "memory")
 builder.add_edge("memory", "fleet")
-builder.add_edge("fleet", "safety")
+
+builder.add_conditional_edges(
+    "fleet",
+    fleet_router,
+    {
+        "safety": "safety",
+        "finish": "finish",
+    },
+)
 
 builder.add_conditional_edges(
     "safety",
@@ -468,8 +528,24 @@ builder.add_conditional_edges(
     },
 )
 
-builder.add_edge("drone", "vision")
-builder.add_edge("recapture", "vision")
+builder.add_conditional_edges(
+    "drone",
+    drone_router,
+    {
+        "vision": "vision",
+        "finish": "finish",
+    },
+)
+
+builder.add_conditional_edges(
+    "recapture",
+    recapture_router,
+    {
+        "vision": "vision",
+        "return_home": "return_home",
+    },
+)
+
 builder.add_edge("vision", "photo_review")
 
 builder.add_conditional_edges(

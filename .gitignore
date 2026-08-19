@@ -37,3 +37,6 @@ rag/vectorstore/
 .DS_Store
 Thumbs.db
 .vscode/
+
+
+missions.json

@@ -71,25 +71,57 @@ Examples:
 "is anyone near the front gate" -> location: "main_gate"
 """
 
-        response = self.client.chat.completions.create(
-            model="qwen/qwen3.6-27b",
+        # Anything here — network failure, auth failure, rate limit,
+        # a malformed response despite response_format — is reported
+        # back as a normal dict with an "error" key instead of
+        # raising, so the graph node calling this can route to a
+        # clean rejection instead of crashing the whole app.
+        try:
+            response = self.client.chat.completions.create(
+                model="qwen/qwen3.6-27b",
 
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+
+                temperature=0,
+                max_completion_tokens=200,
+                reasoning_effort="none",
+
+                response_format={
+                    "type": "json_object"
+                },
+            )
+
+            result = response.choices[0].message.content
+
+            parsed = json.loads(result)
+
+            if not parsed.get("location") or not parsed.get("mission_type"):
+                return {
+                    "mission_type": None,
+                    "location": None,
+                    "priority": None,
+                    "error": "Commander response was missing required fields.",
                 }
-            ],
 
-            temperature=0,
-            max_completion_tokens=200,
-            reasoning_effort="none",
+            return parsed
 
-            response_format={
-                "type": "json_object"
-            },
-        )
+        except json.JSONDecodeError as e:
+            return {
+                "mission_type": None,
+                "location": None,
+                "priority": None,
+                "error": f"Commander returned invalid JSON: {e}",
+            }
 
-        result = response.choices[0].message.content
-
-        return json.loads(result)
+        except Exception as e:
+            return {
+                "mission_type": None,
+                "location": None,
+                "priority": None,
+                "error": f"Commander request failed: {e}",
+            }

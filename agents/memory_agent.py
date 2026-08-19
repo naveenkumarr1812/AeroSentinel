@@ -21,7 +21,7 @@ class MemoryAgent:
             limit=5
         )
 
-        print("\n🧠 MEMORY AGENT")
+        print("\nMEMORY AGENT")
 
         if not history:
 
@@ -104,7 +104,7 @@ class MemoryAgent:
         )
 
         print(
-            "\n💾 MISSION MEMORY UPDATED"
+            "\nMISSION MEMORY UPDATED"
         )
 
         print(
@@ -113,3 +113,10 @@ class MemoryAgent:
         )
 
         return mission
+
+    # ========================================================
+    # DELETE EXPERIENCE
+    # ========================================================
+
+    def delete_mission(self, mission_id: str) -> bool:
+        return self.memory.delete_mission(mission_id)

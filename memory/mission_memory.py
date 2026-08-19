@@ -117,6 +117,30 @@ class MissionMemory:
         return mission
 
     # ========================================================
+    # DELETE MISSION
+    # ========================================================
+
+    def delete_mission(self, mission_id: str) -> bool:
+        """
+        Removes a single mission record by its mission_id. Returns
+        True if a record was found and removed, False otherwise.
+        """
+        missions = self._load()
+
+        filtered = [
+            mission
+            for mission in missions
+            if mission.get("mission_id") != mission_id
+        ]
+
+        if len(filtered) == len(missions):
+            return False
+
+        self._save(filtered)
+
+        return True
+
+    # ========================================================
     # GET ALL MISSIONS
     # ========================================================
 
