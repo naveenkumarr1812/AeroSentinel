@@ -123,6 +123,33 @@ class MockDrone:
             "battery": self.battery,
         }
 
+    def force_recall(self):
+        """
+        Immediately, forcibly returns this drone to base and clears
+        any in-progress flight/charging state — used when an operator
+        resets or aborts a mission mid-flight (the drone can't just be
+        left "in flight" forever in the fleet display). Unlike the
+        normal return_home() + land() sequence, which models a real
+        flight-then-landing and drains battery for it, this is an
+        abrupt recall: no extra battery cost beyond whatever the
+        drone already spent getting into the air, and it applies
+        regardless of current status (safe to call even on a drone
+        that was never airborne).
+        """
+        self.position = "base"
+        self.altitude = 0
+        self._charging_since = None
+        self._charge_start_battery = None
+
+        self.status = "available" if self.battery >= 20 else "landed"
+
+        return {
+            "success": True,
+            "message": f"{self.drone_id} recalled to base.",
+            "drone_id": self.drone_id,
+            "battery": self.battery,
+        }
+
     def takeoff(self, altitude: int = 10):
         self._sync_charging()
 

@@ -1,15 +1,40 @@
-AeroSentinel Perimeter Security SOP
+AeroSentinel Facility Zones SOP
 
-North perimeter, south perimeter, and east gate are authorized inspection zones.
+The facility is divided into four authorized inspection zones. The
+drone must not enter any area outside these four configured zones.
 
-The north perimeter is considered a restricted security area.
+1. North Gate (north_gate)
+A perimeter checkpoint on the north side of the facility. This is a
+security-sensitive access point. Any person or vehicle detected here
+should be treated as a potential security concern and reviewed
+carefully, especially outside scheduled patrol hours.
 
-Person detection near a restricted perimeter should be treated as a potential security incident.
+2. Ground Area (ground_area)
+The open yard and field area used for general perimeter awareness and
+routine patrol. Generally lower risk than the gates or the warehouse,
+but any unexplained activity should still be logged and reviewed.
 
-Visual confirmation is required before escalating a suspected intrusion.
+3. Main Gate (main_gate)
+The primary vehicular and pedestrian entrance to the facility. This is
+a high-traffic zone; vehicle activity here is expected during normal
+business hours and is not automatically suspicious. Unattended
+vehicles, forced entry indicators, or activity outside authorized
+hours should be treated as elevated risk.
 
-Medium-risk detections require human review before an incident response is executed.
+4. Warehouse (warehouse)
+The storage and inventory building. This is a restricted-access zone.
+Any person or vehicle detected here outside scheduled operations
+should be treated as a high-priority security concern and escalated
+promptly.
 
-High-confidence detections should be presented to the human operator with the image analysis evidence.
+General rules across all zones:
 
-The drone must not enter areas outside the configured geofence.
+Visual confirmation is required before escalating any suspected
+intrusion, regardless of which zone it occurs in.
+
+Medium-risk detections require human review before an incident
+response is executed. High-confidence detections should be presented
+to the human operator together with the image analysis evidence.
+
+If a mission requests inspection of a location outside these four
+zones, it must be rejected during pre-flight safety checks.

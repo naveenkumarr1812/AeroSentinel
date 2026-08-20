@@ -844,6 +844,30 @@ def render_inspection_zones(current_location=None):
     render_html(f'<div class="rt-zone-grid">{cards}</div>')
 
 
+def recall_stuck_drones():
+    """
+    Force-recalls every drone in the fleet that isn't in a safe
+    at-rest state ("flying" or "returning"), regardless of which
+    browser session/tab last assigned it.
+
+    Why this scans the whole fleet instead of just the current
+    session's tracked drone: `fleet` (imported from graph.workflow)
+    is a single process-wide object shared by every browser session,
+    but `st.session_state.mission_state` is per-session. If a tab was
+    refreshed or closed mid-mission, or the app hit an unhandled
+    error before this fix existed, that session's memory of which
+    drone it assigned is gone — but the drone itself is still sitting
+    there "flying" forever, because nothing is left to tell it to
+    come home. Sweeping the whole fleet fixes that regardless of how
+    it got stuck.
+    """
+    for telemetry in fleet.get_fleet_status():
+        if telemetry.get("status") in ("flying", "returning"):
+            drone = fleet.get_drone(telemetry["drone_id"])
+            if drone:
+                drone.force_recall()
+
+
 def format_mission_label(timestamp_str):
     """Turns an ISO timestamp into 'Mission <date> · <time>'."""
     try:
@@ -994,7 +1018,7 @@ def render_image_chat(image_path):
     st.text_input(
         "Ask a question about this image",
         key=input_key,
-        placeholder="e.g. What is in the image?",
+        placeholder="e.g. What color is the vehicle? (press Enter to ask)",
         label_visibility="collapsed",
         on_change=_submit_question,
     )
@@ -1105,6 +1129,11 @@ with st.sidebar:
 # ============================================================
 
 if reset_button:
+    # Recall any drone stuck away from base — see recall_stuck_drones()
+    # for why this sweeps the whole fleet instead of only the drone
+    # this session happens to remember assigning.
+    recall_stuck_drones()
+
     st.session_state.mission_started = False
     st.session_state.mission_complete = False
     st.session_state.mission_state = {}
@@ -1120,6 +1149,11 @@ if reset_button:
 # ============================================================
 
 if start_button:
+    # Same fleet-wide sweep as Reset — starting a fresh mission while
+    # any drone is stuck mid-flight (from this session or an
+    # abandoned one) should clean that up too.
+    recall_stuck_drones()
+
     st.session_state.mission_started = True
     st.session_state.mission_complete = False
     st.session_state.interrupt_type = None
@@ -1246,11 +1280,15 @@ render_inspection_zones(current_location=state.get("location"))
 eyebrow("Agent Pipeline")
 
 pipeline = [
-    ("🧠", "Commander", True),
+    ("🧠", "Commander", bool(state.get("mission_type"))),
     ("📚", "RAG Agent", bool(state.get("rag_context"))),
     ("🧭", "Memory Agent", bool(state.get("mission_history") is not None)),
     ("🚁", "Fleet Agent", bool(state.get("assigned_drone"))),
-    ("🛡️", "Safety Agent", bool(state.get("safety_status"))),
+    # safety_status can also be set by Fleet Agent itself (when no
+    # drone is available, it skips Safety Agent entirely) — only
+    # count this as "Safety Agent ran" when a drone was actually
+    # assigned first, since that's the only path that reaches it.
+    ("🛡️", "Safety Agent", bool(state.get("assigned_drone")) and bool(state.get("safety_status"))),
     ("🚀", "Launch Approval", bool(state.get("launch_decision"))),
     ("🎯", "Drone Executor", bool(state.get("image_path"))),
     ("👁️", "VLM Agent", bool(state.get("vision_result"))),

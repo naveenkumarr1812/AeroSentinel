@@ -2,17 +2,30 @@ AeroSentinel Mission Operations SOP
 
 Every autonomous mission follows these stages:
 
-1. Understand the mission objective.
-2. Select an available drone.
-3. Perform pre-flight safety checks.
-4. Navigate to the authorized mission location.
-5. Capture visual data.
-6. Analyze the captured data using the vision system.
-7. Assess the detected risk.
-8. Request human approval when required.
-9. Execute the approved response.
-10. Return the drone safely to its home location.
+1. Understand the mission objective and target inspection zone.
+2. Retrieve relevant operational knowledge and prior mission history
+   for that zone.
+3. Select an available drone from the fleet.
+4. Perform pre-flight safety checks (battery, altitude, geofence).
+5. Request human launch approval before the drone takes off. The
+   drone does not depart until an operator explicitly approves the
+   flight.
+6. Navigate to the authorized inspection zone and capture a photo.
+7. Analyze the captured photo using the vision system.
+8. Present the photo and analysis to a human operator for review.
+   This review happens after every single photo, regardless of risk
+   level — it is not limited to flagged or high-risk detections.
+9. The operator chooses one of two actions:
+   a. Request another photo of the same zone (no re-launch — the
+      drone is already airborne and simply captures the next
+      available image at that location), which repeats from step 7.
+   b. Send the drone home, which ends the mission.
+10. On return, record the full mission outcome — every photo
+    reviewed, the risk assessment for each, and the operator's final
+    decision — to persistent memory, and return the drone safely to
+    base.
 
-Autonomous actions must not bypass safety checks.
-
-If a mission cannot be completed safely, the drone should return home.
+Autonomous actions must not bypass either human checkpoint: launch
+approval before departure, and photo review after every capture. If a
+mission cannot be completed safely at any stage, the drone must return
+home rather than continue.

@@ -1,24 +1,12 @@
-import os
 import json
 
-from dotenv import load_dotenv
-from groq import Groq
-
-
-load_dotenv()
+from agents.groq_client import GroqClientPool
 
 
 class MissionCommander:
 
     def __init__(self):
-        api_key = os.getenv("GROQ_API_KEY")
-
-        if not api_key:
-            raise ValueError(
-                "GROQ_API_KEY is not set in the .env file."
-            )
-
-        self.client = Groq(api_key=api_key)
+        self.client = GroqClientPool()
 
     def understand_mission(self, user_request: str):
 
@@ -71,13 +59,15 @@ Examples:
 "is anyone near the front gate" -> location: "main_gate"
 """
 
-        # Anything here — network failure, auth failure, rate limit,
-        # a malformed response despite response_format — is reported
-        # back as a normal dict with an "error" key instead of
-        # raising, so the graph node calling this can route to a
-        # clean rejection instead of crashing the whole app.
+        # Anything here — network failure, auth failure, rate limit
+        # on every configured key, a malformed response despite
+        # response_format — is reported back as a normal dict with an
+        # "error" key instead of raising, so the graph node calling
+        # this can route to a clean rejection instead of crashing the
+        # whole app. GroqClientPool already retries across any extra
+        # API keys before this except block is ever reached.
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.create_chat_completion(
                 model="qwen/qwen3.6-27b",
 
                 messages=[

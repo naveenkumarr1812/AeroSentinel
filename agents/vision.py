@@ -1,11 +1,11 @@
-import os
 import io
 import base64
 import json
 
 from dotenv import load_dotenv
-from groq import Groq
 from PIL import Image
+
+from agents.groq_client import GroqClientPool
 
 
 load_dotenv()
@@ -44,14 +44,7 @@ def _load_image_as_base64(image_path: str) -> str:
 class VisionAnalyzer:
 
     def __init__(self):
-        api_key = os.getenv("GROQ_API_KEY")
-
-        if not api_key:
-            raise ValueError(
-                "GROQ_API_KEY is not set in the .env file."
-            )
-
-        self.client = Groq(api_key=api_key)
+        self.client = GroqClientPool()
 
     def analyze_image(self, image_path: str):
 
@@ -131,7 +124,7 @@ Allowed risk levels:
         # 3. Call VLM
         # ---------------------------------------
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.create_chat_completion(
                 model="qwen/qwen3.6-27b",
 
                 messages=[
@@ -223,7 +216,7 @@ Operator's question:
 """
 
         try:
-            response = self.client.chat.completions.create(
+            response = self.client.create_chat_completion(
                 model="qwen/qwen3.6-27b",
 
                 messages=[

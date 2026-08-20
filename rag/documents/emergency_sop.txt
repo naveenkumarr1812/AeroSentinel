@@ -1,13 +1,32 @@
 AeroSentinel Emergency Response SOP
 
-Potential security incidents must be classified by risk.
+Every photo captured during a mission is reviewed by a human operator
+before the drone takes any further action — this applies regardless
+of the assessed risk level. Photo review is not conditional on a
+detection being flagged; it is a standard step in every mission.
 
-Low-risk detections may be logged without immediate escalation.
+Risk level guides how the operator should treat what they are seeing,
+not whether they see it:
 
-Medium-risk detections require human approval before an incident response.
+None or low risk: routine. The operator can send the drone home or
+request another angle purely for situational awareness.
 
-High-risk detections should immediately notify the designated security operator and request human confirmation before consequential physical actions.
+Medium risk: the operator should look closely before deciding. A
+request for another photo (a different angle or a closer look) is
+often appropriate before returning the drone home.
 
-If communication with the operator is unavailable, the drone should prioritize safety and return home.
+High risk: the operator should treat this as a priority. If the
+scene is ambiguous, request another photo before deciding; if the
+detection is clear, return the drone home promptly so the incident
+can be acted on and recorded without delay.
 
-The system must maintain an auditable record of significant incidents and operator decisions.
+If communication with the operator is delayed, the drone should
+remain in a safe holding state rather than taking any autonomous
+action on its own — a human decision is always required before the
+drone proceeds, whether that means requesting another photo or
+returning home.
+
+The system must maintain an auditable record of every mission: each
+photo taken, its risk assessment, and the operator's decision at each
+step. This record is what later missions draw on as prior history for
+the same zone.
