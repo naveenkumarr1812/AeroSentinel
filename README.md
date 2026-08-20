@@ -1,71 +1,169 @@
 # AeroSentinel
 
-AeroSentinel is an autonomous drone security and incident-response prototype built with Python, LangGraph, Streamlit, and a retrieval-augmented knowledge layer. It simulates a tactical mission workflow where a drone is selected, safety-checked, launched with human approval, and analyzed for threats such as people, vehicles, and perimeter violations.
+**AeroSentinel is an agentic drone security platform for supervised autonomous missions.**
 
-## Overview
+It turns a natural-language security request into a structured mission, grounds decisions in operational procedures, assigns a simulated drone, and keeps a human operator in control at every consequential step.
 
-The project combines:
+## Live Demo
 
-- a mission commander to interpret user requests
-- a RAG knowledge layer for standard operating procedures
-- agent-based memory and fleet coordination
-- a safety gate to validate flight readiness
-- human-in-the-loop approval checkpoints before launch and before critical decisions
-- a simulation environment for drone activity and image review
+<a href="https://aerosentinelapp.streamlit.app/" target="_blank" rel="noopener noreferrer">
+    <img src="images/aerosentinel-preview.png" alt="AeroSentinel Mission Control live application preview" width="100%">
+</a>
 
-## Project structure
+Open the [AeroSentinel live demo](https://aerosentinelapp.streamlit.app/) to try the mission console in a new browser tab.
 
-- `app.py` — main Streamlit mission console UI
-- `run_mission.py` — terminal-based mission runner for interactive approvals
-- `agents/` — autonomous system agents for command, safety, fleet, memory, and vision
-- `graph/` — LangGraph workflow and state definitions
-- `simulator/` — mock drone and fleet logic
-- `rag/` — retrieval layer and SOP documents
-- `memory/` — persistent mission history and state data
-- `images/` — mission image assets used for simulated review
+## What It Does
 
-## Requirements
+An operator can enter a request such as:
 
-This project is designed to run in a Python virtual environment. A local `venv` folder is already present in the workspace, and it is excluded from git via the repository `.gitignore`.
+> Inspect the ground area for intrusions
 
-## Local setup
+AeroSentinel then:
 
-1. Open a terminal in the project root.
-2. Activate the virtual environment:
+1. Interprets the request as a mission type, location, and priority.
+2. Retrieves relevant security SOPs from the local ChromaDB knowledge base.
+3. Loads mission history for the requested location.
+4. Selects an available drone based on fleet state and battery.
+5. Runs pre-flight checks for battery, altitude, and geofence rules.
+6. Pauses for operator approval before launch.
+7. Simulates takeoff, navigation, and image capture.
+8. Sends the captured image to a Groq vision-language model for analysis.
+9. Pauses after every image so the operator can request another angle or return home.
+10. Records the mission, photo assessments, and operator decision to JSON-backed memory.
+11. Routes failures to a clear rejection or safe return instead of crashing the application.
 
-   PowerShell:
-   ```powershell
-   .\venv\Scripts\Activate.ps1
-   ```
+## Human-In-The-Loop Checkpoints
 
-3. Start the Streamlit app:
+Both checkpoints are real LangGraph `interrupt()` calls. The graph state is checkpointed and resumes from the paused node when the operator responds.
 
-   ```powershell
-   streamlit run app.py
-   ```
+| Checkpoint | When it occurs | Operator decision |
+| --- | --- | --- |
+| Launch approval | After fleet allocation and pre-flight safety checks | Approve launch or keep the drone grounded |
+| Photo review | After each image is captured and analyzed | Capture another image or return home |
 
-4. Or run the terminal mission flow:
+Requesting another image keeps the drone in flight and advances to the next numbered image in the same zone. A new launch is not required.
 
-   ```powershell
-   python run_mission.py
-   ```
+## Architecture
 
-## Environment variables
-
-The project uses a Groq API key for AI access. Store it in a local `.env` file, for example:
-
-```env
-GROQ_API_KEY=your_api_key_here
+```mermaid
+flowchart TD
+    Start([Start]) --> Commander[Mission Commander]
+    Commander -->|understood| RAG[SOP Retrieval]
+    Commander -->|invalid| Finish[Safe Failure]
+    RAG --> Memory[Mission History]
+    Memory --> Fleet[Fleet Allocation]
+    Fleet -->|drone assigned| Safety[Pre-flight Safety]
+    Fleet -->|none available| Finish
+    Safety -->|approved| Launch{{Launch Approval}}
+    Safety -->|rejected| Finish
+    Launch -->|approve| Drone[Drone Executor]
+    Launch -->|reject| Rejected[Launch Rejected]
+    Drone -->|captured| Vision[Vision Analyzer]
+    Drone -->|failed| Finish
+    Vision --> Review{{Photo Review}}
+    Review -->|another photo| Recapture[Recapture]
+    Review -->|return home| Return[Return Home]
+    Recapture -->|captured| Vision
+    Recapture -->|failed| Return
+    Rejected --> End([End])
+    Return --> End
+    Finish --> End
 ```
 
-Do not commit your `.env` file. It is ignored by git.
+## Technology
 
-## Notes
+| Layer | Technology |
+| --- | --- |
+| Orchestration | LangGraph with checkpointed interrupts |
+| Text and vision models | Groq API using `qwen/qwen3.6-27b` |
+| Retrieval | ChromaDB and `sentence-transformers/all-MiniLM-L6-v2` |
+| Frontend | Streamlit |
+| Drone simulation | Custom `MockDrone` and `DroneFleet` classes |
+| Mission memory | JSON-backed mission log |
 
-- Human approval checkpoints are included so the mission can pause before launch and before high-risk decisions.
-- The project includes a mocked fleet and image pipeline to simulate a security operations control room.
-- Some generated vector-store files are ignored to avoid committing local runtime indexes.
+## Project Layout
+
+```text
+AeroSentinel/
+├── app.py                  # Streamlit mission console
+├── agents/                 # Commander, RAG, memory, fleet, safety, drone, and vision agents
+├── graph/                  # MissionState and the LangGraph workflow
+├── simulator/              # MockDrone and DroneFleet implementations
+├── rag/
+│   ├── rag_engine.py       # Embedding and ChromaDB wrapper
+│   └── documents/          # Battery, emergency, mission, and perimeter SOPs
+├── memory/                 # JSON-backed mission history
+├── images/                 # Simulated camera-feed images by location
+├── requirements.txt
+└── LICENCE                 # MIT License
+```
+
+## Getting Started
+
+### 1. Create and activate a virtual environment
+
+PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### 2. Install dependencies
+
+```powershell
+pip install -r requirements.txt
+```
+
+The first RAG startup may download the local sentence-transformer model. The vision workflow also requires access to the Groq API.
+
+### 3. Configure Groq
+
+Create a `.env` file in the project root:
+
+```env
+GROQ_API_KEY=your_primary_key_here
+
+# Optional fallback keys for rate limits or transient API failures.
+GROQ_API_KEY_2=your_backup_key_here
+GROQ_API_KEY_3=another_backup_key_here
+```
+
+Never commit `.env` or expose API keys in source control.
+
+### 4. Add simulated camera images
+
+Each supported inspection zone uses sequentially numbered images. At minimum, add `1.png` to the relevant folder:
+
+```text
+images/
+├── ground_area/1.png
+├── main_gate/1.png
+├── north_gate/1.png
+└── warehouse/1.png
+```
+
+`.png`, `.jpg`, and `.jpeg` are supported. Additional files such as `2.png` and `3.png` become available through the photo-review recapture flow. Images are resized and compressed before being sent to the vision model.
+
+### 5. Run the console
+
+```powershell
+streamlit run app.py
+```
+
+## Simulated Fleet
+
+The application starts with three simulated drones:
+
+| Drone | Callsign | Starting battery | Starting status |
+| --- | --- | ---: | --- |
+| D1 | Falcon | 32% | Available |
+| D2 | Raven | 87% | Available |
+| D3 | Kestrel | 65% | Busy |
+
+Battery is consumed during takeoff, navigation, and return. Drones can be manually charged from the UI while at base. If no drone is available, the mission reports the state of each drone rather than returning a generic error.
+
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENCE](LICENCE) file for the full text.
+AeroSentinel is released under the [MIT License](LICENCE).
