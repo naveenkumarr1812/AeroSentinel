@@ -382,26 +382,25 @@ st.markdown(
         border: 1px solid var(--border);
         background: var(--bg-panel);
         border-radius: 3px;
-        padding: 18px 16px;
-        overflow-x: auto;
+        padding: 18px 10px;
         gap: 0;
     }
 
     .rt-node {
-        flex: 1;
-        min-width: 96px;
+        flex: 1 1 0;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         position: relative;
-        padding: 0 6px;
+        padding: 0 3px;
     }
 
     .rt-node:not(:last-child)::after {
         content: "";
         position: absolute;
-        top: 20px;
+        top: 17px;
         left: 58%;
         width: 84%;
         height: 1px;
@@ -414,17 +413,18 @@ st.markdown(
     }
 
     .rt-node-icon {
-        width: 40px;
-        height: 40px;
+        width: 34px;
+        height: 34px;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 17px;
+        font-size: 14px;
         border: 1px solid var(--border-active);
         background: var(--bg-panel-alt);
         z-index: 1;
         position: relative;
+        flex-shrink: 0;
     }
 
     .rt-node.node-on .rt-node-icon {
@@ -434,12 +434,14 @@ st.markdown(
     }
 
     .rt-node-label {
-        font-size: 10px;
-        letter-spacing: 0.06em;
+        font-size: 8.5px;
+        letter-spacing: 0.04em;
         text-transform: uppercase;
         text-align: center;
         color: var(--text-dim);
-        line-height: 1.3;
+        line-height: 1.25;
+        word-break: break-word;
+        max-width: 100%;
     }
 
     .rt-node.node-on .rt-node-label {
