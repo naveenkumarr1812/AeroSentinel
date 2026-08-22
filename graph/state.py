@@ -6,6 +6,11 @@ class MissionState(TypedDict, total=False):
     # User request
     user_request: str
 
+    # Which browser session started this mission — used to scope
+    # mission history so one operator's session never surfaces
+    # another operator's past missions or lets them delete them.
+    session_id: str
+
     # Mission understanding
     mission_type: str
     location: str

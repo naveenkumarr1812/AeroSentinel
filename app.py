@@ -1,6 +1,7 @@
 import streamlit as st
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from langgraph.types import Command
 
 from graph.workflow import graph, fleet, vision_analyzer, memory_agent
@@ -870,24 +871,42 @@ def recall_stuck_drones():
                 drone.force_recall()
 
 
+# Every mission timestamp is displayed in this timezone, regardless
+# of what timezone the server itself runs in (Streamlit Cloud servers
+# are typically UTC, which is what made these times look "wrong").
+DISPLAY_TIMEZONE = ZoneInfo("Asia/Kolkata")
+
+
 def format_mission_label(timestamp_str):
-    """Turns an ISO timestamp into 'Mission <date> · <time>'."""
+    """Turns a stored timestamp into 'Mission <date> · <time>' in IST."""
     try:
         dt = datetime.fromisoformat(timestamp_str)
-        return f"Mission {dt.strftime('%b %d, %Y · %I:%M %p')}"
+
+        if dt.tzinfo is None:
+            # Older records (saved before timestamps were made
+            # timezone-aware) and the server's own naive local clock
+            # are UTC in practice on this hosting platform — treat a
+            # naive timestamp as UTC before converting for display.
+            dt = dt.replace(tzinfo=timezone.utc)
+
+        dt_local = dt.astimezone(DISPLAY_TIMEZONE)
+        return f"Mission {dt_local.strftime('%b %d, %Y · %I:%M %p')}"
     except (TypeError, ValueError):
         return "Mission"
 
 
 def render_sidebar_mission_history():
     """
-    Recent missions across every location, always shown in the
-    sidebar — home screen and active mission alike — with a delete
-    button per entry. Reads straight from missions.json on every
-    rerun (via memory_agent), so a new mission finishing or a delete
-    click shows up instantly without any extra wiring.
+    Recent missions started by THIS browser session only — home
+    screen and active mission alike — with a delete button per entry.
+    Reads straight from missions.json on every rerun (via
+    memory_agent), so a new mission finishing or a delete click shows
+    up instantly without any extra wiring. Missions from any other
+    session (a different browser/tab/operator using the same deployed
+    app) never appear here.
     """
-    missions = memory_agent.memory.get_recent(limit=10)
+    session_id = st.session_state.session_id
+    missions = memory_agent.memory.search_by_session(session_id, limit=10)
 
     if not missions:
         return
@@ -907,7 +926,7 @@ def render_sidebar_mission_history():
             st.write("**Human Decision:**", mission_item.get("human_decision"))
 
             if st.button("🗑  Delete", key=f"delete_mission_{mission_id}", use_container_width=True):
-                memory_agent.delete_mission(mission_id)
+                memory_agent.delete_mission(mission_id, session_id=session_id)
                 st.rerun()
 
 
@@ -1051,6 +1070,15 @@ if "mission_state" not in st.session_state:
 if "thread_id" not in st.session_state:
     st.session_state.thread_id = "aerosentinel-ui"
 
+# A stable identifier for this browser session, set once and never
+# regenerated (unlike thread_id, which changes every mission). Every
+# mission this session starts is tagged with it, and the sidebar
+# history / delete button only ever operate on missions carrying this
+# exact session_id — so one operator's browser tab never sees or can
+# delete another operator's missions on the same deployed app.
+if "session_id" not in st.session_state:
+    st.session_state.session_id = uuid.uuid4().hex
+
 # Which HITL checkpoint (if any) is currently paused, and the payload
 # the interrupting node passed to interrupt(). None when no checkpoint
 # is pending.
@@ -1165,7 +1193,10 @@ if start_button:
     st.session_state.thread_id = f"aerosentinel-{uuid.uuid4().hex}"
 
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
-    initial_state = {"user_request": mission}
+    initial_state = {
+        "user_request": mission,
+        "session_id": st.session_state.session_id,
+    }
 
     try:
         with st.spinner("Agents are executing the mission..."):

@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -75,6 +75,7 @@ class MissionMemory:
         human_decision: str,
         human_reason: str,
         outcome: str,
+        session_id: str | None = None,
     ):
 
         missions = self._load()
@@ -85,7 +86,19 @@ class MissionMemory:
                 uuid4()
             ),
 
-            "timestamp": datetime.now().isoformat(),
+            # Stored explicitly in UTC (timezone-aware) rather than
+            # naive datetime.now() — a naive timestamp is ambiguous
+            # about which timezone it's actually in, which is exactly
+            # what made these times "wrong" for display. UTC is
+            # converted to the operator's local timezone at display
+            # time instead (see format_mission_label() in app.py).
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+
+            # Which browser session created this mission — everything
+            # session-scoped (the sidebar history list, delete) reads
+            # this field so one operator never sees another's data.
+            # None for records saved before this field existed.
+            "session_id": session_id,
 
             "drone_id": drone_id,
 
@@ -120,17 +133,32 @@ class MissionMemory:
     # DELETE MISSION
     # ========================================================
 
-    def delete_mission(self, mission_id: str) -> bool:
+    def delete_mission(
+        self,
+        mission_id: str,
+        session_id: str | None = None,
+    ) -> bool:
         """
-        Removes a single mission record by its mission_id. Returns
-        True if a record was found and removed, False otherwise.
+        Removes a single mission record by its mission_id. If
+        session_id is given, only deletes the record when it also
+        belongs to that session — so one session can't delete another
+        session's mission even if it somehow knew the mission_id.
+        Returns True if a record was found and removed, False
+        otherwise.
         """
         missions = self._load()
+
+        def _keep(mission):
+            if mission.get("mission_id") != mission_id:
+                return True
+            if session_id is not None and mission.get("session_id") != session_id:
+                return True
+            return False
 
         filtered = [
             mission
             for mission in missions
-            if mission.get("mission_id") != mission_id
+            if _keep(mission)
         ]
 
         if len(filtered) == len(missions):
@@ -184,6 +212,51 @@ class MissionMemory:
             mission
             for mission in missions
             if mission.get("drone_id") == drone_id
+        ]
+
+        return matching[-limit:]
+
+    # ========================================================
+    # SEARCH BY SESSION
+    # ========================================================
+
+    def search_by_session(
+        self,
+        session_id: str,
+        limit: int = 10,
+    ):
+        """All missions started by one browser session, most recent
+        last (matching get_recent's ordering)."""
+
+        missions = self._load()
+
+        matching = [
+            mission
+            for mission in missions
+            if mission.get("session_id") == session_id
+        ]
+
+        return matching[-limit:]
+
+    def search_by_session_and_location(
+        self,
+        session_id: str,
+        location: str,
+        limit: int = 5,
+    ):
+        """
+        Used by the memory agent when grounding a new mission — prior
+        history at this location, scoped to the operator's own
+        session only.
+        """
+
+        missions = self._load()
+
+        matching = [
+            mission
+            for mission in missions
+            if mission.get("session_id") == session_id
+            and mission.get("location") == location
         ]
 
         return matching[-limit:]

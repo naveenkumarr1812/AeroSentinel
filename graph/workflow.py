@@ -136,7 +136,10 @@ def rag_node(state: MissionState):
 
 def memory_node(state: MissionState):
     try:
-        history = memory_agent.retrieve_history(location=state["location"])
+        history = memory_agent.retrieve_history(
+            location=state["location"],
+            session_id=state.get("session_id"),
+        )
     except Exception as e:
         print(f"\nMEMORY AGENT: history lookup failed, continuing without it ({e})")
         history = []
@@ -427,6 +430,7 @@ def return_home_node(state: MissionState):
         human_decision=state.get("human_decision", "return"),
         human_reason=state.get("human_reason", ""),
         outcome=outcome,
+        session_id=state.get("session_id"),
     )
 
     drone_executor.return_home(drone_id)

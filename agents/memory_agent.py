@@ -13,13 +13,21 @@ class MemoryAgent:
 
     def retrieve_history(
         self,
-        location: str
+        location: str,
+        session_id: str | None = None,
     ):
 
-        history = self.memory.search_by_location(
-            location=location,
-            limit=5
-        )
+        if session_id:
+            history = self.memory.search_by_session_and_location(
+                session_id=session_id,
+                location=location,
+                limit=5,
+            )
+        else:
+            history = self.memory.search_by_location(
+                location=location,
+                limit=5
+            )
 
         print("\nMEMORY AGENT")
 
@@ -80,6 +88,7 @@ class MemoryAgent:
         human_decision: str,
         human_reason: str,
         outcome: str,
+        session_id: str | None = None,
     ):
 
         mission = self.memory.record_mission(
@@ -101,6 +110,8 @@ class MemoryAgent:
             human_reason=human_reason,
 
             outcome=outcome,
+
+            session_id=session_id,
         )
 
         print(
@@ -118,5 +129,9 @@ class MemoryAgent:
     # DELETE EXPERIENCE
     # ========================================================
 
-    def delete_mission(self, mission_id: str) -> bool:
-        return self.memory.delete_mission(mission_id)
+    def delete_mission(
+        self,
+        mission_id: str,
+        session_id: str | None = None,
+    ) -> bool:
+        return self.memory.delete_mission(mission_id, session_id=session_id)
