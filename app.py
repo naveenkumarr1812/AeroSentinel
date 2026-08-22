@@ -1420,10 +1420,11 @@ def resume_graph(decision, reason):
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
 
     try:
-        result = graph.invoke(
-            Command(resume={"decision": decision, "reason": reason}),
-            config=config,
-        )
+        with st.spinner("Processing decision..."):
+            result = graph.invoke(
+                Command(resume={"decision": decision, "reason": reason}),
+                config=config,
+            )
     except Exception:
         # The checkpoint for this mission is gone — almost always
         # because the app process restarted (Streamlit Cloud can do
