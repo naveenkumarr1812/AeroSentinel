@@ -42,8 +42,10 @@ consoles caused by emoji prints in the original node functions, so
 none are used here.
 """
 
+import sqlite3
+
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import interrupt
 
 from graph.state import MissionState
@@ -561,6 +563,20 @@ builder.add_edge("launch_rejected", END)
 builder.add_edge("return_home", END)
 builder.add_edge("finish", END)
 
-_checkpointer = MemorySaver()
+# SqliteSaver instead of MemorySaver: an in-memory checkpointer loses
+# every paused mission (a launch or photo review still awaiting a
+# human decision) the instant the Python process restarts — which
+# hosting platforms like Streamlit Community Cloud can do at any
+# time (idle recycling, redeploys). Writing checkpoints to a local
+# SQLite file survives normal script reruns and process hiccups
+# within the same running container. It does NOT survive a full
+# redeploy/container rebuild wiping the filesystem — for that, an
+# external database-backed checkpointer would be needed — but this
+# covers the far more common case that just crashed above.
+_conn = sqlite3.connect(
+    "aerosentinel_checkpoints.sqlite",
+    check_same_thread=False,
+)
+_checkpointer = SqliteSaver(_conn)
 
 graph = builder.compile(checkpointer=_checkpointer)

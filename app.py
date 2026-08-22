@@ -1018,7 +1018,7 @@ def render_image_chat(image_path):
     st.text_input(
         "Ask a question about this image",
         key=input_key,
-        placeholder="e.g. What is in the image?",
+        placeholder="e.g. What color is the vehicle? (press Enter to ask)",
         label_visibility="collapsed",
         on_change=_submit_question,
     )
@@ -1165,8 +1165,13 @@ if start_button:
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
     initial_state = {"user_request": mission}
 
-    with st.spinner("Agents are executing the mission..."):
-        result = graph.invoke(initial_state, config=config)
+    try:
+        with st.spinner("Agents are executing the mission..."):
+            result = graph.invoke(initial_state, config=config)
+    except Exception as e:
+        st.session_state.mission_started = False
+        st.error(f"Could not start the mission: {e}")
+        st.stop()
 
     st.session_state.mission_state = result
 
@@ -1412,10 +1417,39 @@ def resume_graph(decision, reason):
     """
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
 
-    result = graph.invoke(
-        Command(resume={"decision": decision, "reason": reason}),
-        config=config,
-    )
+    try:
+        result = graph.invoke(
+            Command(resume={"decision": decision, "reason": reason}),
+            config=config,
+        )
+    except Exception:
+        # The checkpoint for this mission is gone — almost always
+        # because the app process restarted (Streamlit Cloud can do
+        # this at any time) between the launch/photo-review pause and
+        # this click. There's no state left to resume, so recover
+        # cleanly instead of showing a raw traceback: recall whatever
+        # drone this session thought was flying, then hand back a
+        # clear explanation and force a fresh start.
+        in_progress_drone_id = st.session_state.mission_state.get("assigned_drone")
+        if in_progress_drone_id:
+            drone_to_recall = fleet.get_drone(in_progress_drone_id)
+            if drone_to_recall:
+                drone_to_recall.force_recall()
+
+        st.session_state.mission_started = False
+        st.session_state.mission_complete = False
+        st.session_state.mission_state = {}
+        st.session_state.interrupt_type = None
+        st.session_state.interrupt_payload = {}
+        st.session_state.image_chat_history = {}
+        st.session_state.thread_id = f"aerosentinel-{uuid.uuid4().hex}"
+
+        st.error(
+            "This mission's paused session could not be found — the app "
+            "likely restarted while it was waiting for your decision. "
+            "The drone has been recalled. Please start a new mission."
+        )
+        st.stop()
 
     st.session_state.mission_state = result
 
