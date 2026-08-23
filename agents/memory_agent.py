@@ -1,70 +1,83 @@
-import json
-from datetime import datetime, timezone
-from pathlib import Path
-from uuid import uuid4
+from memory.mission_memory import MissionMemory
 
 
-class MissionMemory:
+class MemoryAgent:
 
-    def __init__(
+    def __init__(self):
+
+        self.memory = MissionMemory()
+
+    # ========================================================
+    # RETRIEVE PREVIOUS EXPERIENCE
+    # ========================================================
+
+    def retrieve_history(
         self,
-        file_path: str = "memory/missions.json"
+        location: str,
+        session_id: str | None = None,
     ):
 
-        self.file_path = Path(file_path)
-
-        self.file_path.parent.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        if not self.file_path.exists():
-
-            self.file_path.write_text(
-                "[]",
-                encoding="utf-8"
+        if session_id:
+            history = self.memory.search_by_session_and_location(
+                session_id=session_id,
+                location=location,
+                limit=5,
+            )
+        else:
+            history = self.memory.search_by_location(
+                location=location,
+                limit=5
             )
 
-    # ========================================================
-    # LOAD
-    # ========================================================
+        print("\nMEMORY AGENT")
 
-    def _load(self):
+        if not history:
 
-        try:
-
-            return json.loads(
-                self.file_path.read_text(
-                    encoding="utf-8"
-                )
+            print(
+                f"No previous missions found "
+                f"at {location}."
             )
-
-        except (
-            json.JSONDecodeError,
-            FileNotFoundError
-        ):
 
             return []
 
-    # ========================================================
-    # SAVE
-    # ========================================================
-
-    def _save(self, missions):
-
-        self.file_path.write_text(
-            json.dumps(
-                missions,
-                indent=4
-            ),
-            encoding="utf-8"
+        print(
+            f"Found {len(history)} previous "
+            f"mission(s) at {location}."
         )
 
+        for mission in history:
+
+            print(
+                f"\n[{mission['timestamp']}]"
+            )
+
+            print(
+                f"Detection: "
+                f"{mission['detection']}"
+            )
+
+            print(
+                f"Confidence: "
+                f"{mission['confidence']}"
+            )
+
+            print(
+                f"Risk: "
+                f"{mission['risk_level']}"
+            )
+
+            print(
+                f"Human decision: "
+                f"{mission['human_decision']}"
+            )
+
+        return history
+
     # ========================================================
-    # RECORD MISSION
+    # SAVE EXPERIENCE
     # ========================================================
 
-    def record_mission(
+    def save_mission(
         self,
         drone_id: str,
         location: str,
@@ -78,59 +91,42 @@ class MissionMemory:
         session_id: str | None = None,
     ):
 
-        missions = self._load()
+        mission = self.memory.record_mission(
 
-        mission = {
+            drone_id=drone_id,
 
-            "mission_id": str(
-                uuid4()
-            ),
+            location=location,
 
-            # Stored explicitly in UTC (timezone-aware) rather than
-            # naive datetime.now() — a naive timestamp is ambiguous
-            # about which timezone it's actually in, which is exactly
-            # what made these times "wrong" for display. UTC is
-            # converted to the operator's local timezone at display
-            # time instead (see format_mission_label() in app.py).
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            mission_type=mission_type,
 
-            # Which browser session created this mission — everything
-            # session-scoped (the sidebar history list, delete) reads
-            # this field so one operator never sees another's data.
-            # None for records saved before this field existed.
-            "session_id": session_id,
+            detection=detection,
 
-            "drone_id": drone_id,
+            confidence=confidence,
 
-            "location": location,
+            risk_level=risk_level,
 
-            "mission_type": mission_type,
+            human_decision=human_decision,
 
-            "detection": detection,
+            human_reason=human_reason,
 
-            "confidence": confidence,
+            outcome=outcome,
 
-            "risk_level": risk_level,
-
-            "human_decision": human_decision,
-
-            "human_reason": human_reason,
-
-            "outcome": outcome,
-        }
-
-        missions.append(
-            mission
+            session_id=session_id,
         )
 
-        self._save(
-            missions
+        print(
+            "\nMISSION MEMORY UPDATED"
+        )
+
+        print(
+            f"Mission ID: "
+            f"{mission['mission_id']}"
         )
 
         return mission
 
     # ========================================================
-    # DELETE MISSION
+    # DELETE EXPERIENCE
     # ========================================================
 
     def delete_mission(
@@ -138,138 +134,4 @@ class MissionMemory:
         mission_id: str,
         session_id: str | None = None,
     ) -> bool:
-        """
-        Removes a single mission record by its mission_id. If
-        session_id is given, only deletes the record when it also
-        belongs to that session — so one session can't delete another
-        session's mission even if it somehow knew the mission_id.
-        Returns True if a record was found and removed, False
-        otherwise.
-        """
-        missions = self._load()
-
-        def _keep(mission):
-            if mission.get("mission_id") != mission_id:
-                return True
-            if session_id is not None and mission.get("session_id") != session_id:
-                return True
-            return False
-
-        filtered = [
-            mission
-            for mission in missions
-            if _keep(mission)
-        ]
-
-        if len(filtered) == len(missions):
-            return False
-
-        self._save(filtered)
-
-        return True
-
-    # ========================================================
-    # GET ALL MISSIONS
-    # ========================================================
-
-    def get_all_missions(self):
-
-        return self._load()
-
-    # ========================================================
-    # SEARCH BY LOCATION
-    # ========================================================
-
-    def search_by_location(
-        self,
-        location: str,
-        limit: int = 5
-    ):
-
-        missions = self._load()
-
-        matching = [
-            mission
-            for mission in missions
-            if mission.get("location") == location
-        ]
-
-        return matching[-limit:]
-
-    # ========================================================
-    # SEARCH BY DRONE
-    # ========================================================
-
-    def search_by_drone(
-        self,
-        drone_id: str,
-        limit: int = 5
-    ):
-
-        missions = self._load()
-
-        matching = [
-            mission
-            for mission in missions
-            if mission.get("drone_id") == drone_id
-        ]
-
-        return matching[-limit:]
-
-    # ========================================================
-    # SEARCH BY SESSION
-    # ========================================================
-
-    def search_by_session(
-        self,
-        session_id: str,
-        limit: int = 10,
-    ):
-        """All missions started by one browser session, most recent
-        last (matching get_recent's ordering)."""
-
-        missions = self._load()
-
-        matching = [
-            mission
-            for mission in missions
-            if mission.get("session_id") == session_id
-        ]
-
-        return matching[-limit:]
-
-    def search_by_session_and_location(
-        self,
-        session_id: str,
-        location: str,
-        limit: int = 5,
-    ):
-        """
-        Used by the memory agent when grounding a new mission — prior
-        history at this location, scoped to the operator's own
-        session only.
-        """
-
-        missions = self._load()
-
-        matching = [
-            mission
-            for mission in missions
-            if mission.get("session_id") == session_id
-            and mission.get("location") == location
-        ]
-
-        return matching[-limit:]
-
-    # ========================================================
-    # RECENT MISSIONS
-    # ========================================================
-
-    def get_recent(
-        self,
-        limit: int = 5
-    ):
-
-        missions = self._load()
-
-        return missions[-limit:]
+        return self.memory.delete_mission(mission_id, session_id=session_id)
