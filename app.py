@@ -1134,7 +1134,8 @@ with st.sidebar:
 
     mission = st.text_area(
         "Mission Request",
-        value="Inspect the ground area for intrusions",
+        value="",
+        placeholder="Inspect the ground area for intrusions",
         height=100,
     )
 
@@ -1178,7 +1179,10 @@ if reset_button:
 # START MISSION
 # ============================================================
 
-if start_button:
+if start_button and not mission.strip():
+    st.sidebar.warning("Enter a mission request before starting.")
+
+if start_button and mission.strip():
     # Same fleet-wide sweep as Reset — starting a fresh mission while
     # any drone is stuck mid-flight (from this session or an
     # abandoned one) should clean that up too.
