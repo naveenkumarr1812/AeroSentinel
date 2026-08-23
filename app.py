@@ -1039,7 +1039,7 @@ def render_image_chat(image_path):
     st.text_input(
         "Ask a question about this image",
         key=input_key,
-        placeholder="e.g. What color is the vehicle? (press Enter to ask)",
+        placeholder="e.g. what is in the image?",
         label_visibility="collapsed",
         on_change=_submit_question,
     )
