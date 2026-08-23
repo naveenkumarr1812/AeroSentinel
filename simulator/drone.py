@@ -27,6 +27,9 @@ class MockDrone:
         battery: int,
         position: str = "base",
         status: str = "available",
+        charging_since: float | None = None,
+        charge_start_battery: float | None = None,
+        on_change=None,
     ):
         self.drone_id = drone_id
         self.battery = battery
@@ -34,9 +37,23 @@ class MockDrone:
         self.status = status
         self.altitude = 0
 
-        # Charging state — set when start_charging() is called.
-        self._charging_since = None
-        self._charge_start_battery = None
+        # Charging state — set when start_charging() is called. Also
+        # restorable from a saved snapshot (see DroneFleet), so a
+        # process restart mid-charge doesn't just discard progress.
+        self._charging_since = charging_since
+        self._charge_start_battery = charge_start_battery
+
+        # Called after any state-changing method so DroneFleet can
+        # persist the whole fleet to disk — without this, drone
+        # battery/status only ever lives in process memory, which
+        # hosting platforms like Streamlit Community Cloud can wipe
+        # at any time (idle sleep/wake, redeploys), silently resetting
+        # every drone back to its hardcoded starting battery.
+        self._on_change = on_change
+
+    def _persist(self):
+        if self._on_change:
+            self._on_change()
 
     def _sync_charging(self):
         """
@@ -52,13 +69,20 @@ class MockDrone:
         elapsed = time.time() - self._charging_since
         gained = (elapsed / self.FULL_CHARGE_SECONDS) * 100
         new_battery = min(100, self._charge_start_battery + gained)
-        self.battery = int(new_battery)
+        new_battery_int = int(new_battery)
+
+        changed = new_battery_int != self.battery
+        self.battery = new_battery_int
 
         if self.battery >= 100:
             self.battery = 100
             self.status = "available"
             self._charging_since = None
             self._charge_start_battery = None
+            changed = True
+
+        if changed:
+            self._persist()
 
     def start_charging(self):
         """
@@ -89,6 +113,7 @@ class MockDrone:
         self.status = "charging"
         self._charging_since = time.time()
         self._charge_start_battery = self.battery
+        self._persist()
 
         return {
             "success": True,
@@ -115,6 +140,7 @@ class MockDrone:
         self._charging_since = None
         self._charge_start_battery = None
         self.status = "available" if self.battery >= 20 else "landed"
+        self._persist()
 
         return {
             "success": True,
@@ -142,6 +168,7 @@ class MockDrone:
         self._charge_start_battery = None
 
         self.status = "available" if self.battery >= 20 else "landed"
+        self._persist()
 
         return {
             "success": True,
@@ -168,6 +195,7 @@ class MockDrone:
         self.status = "flying"
         self.altitude = altitude
         self.battery -= 2
+        self._persist()
 
         return {
             "success": True,
@@ -186,6 +214,7 @@ class MockDrone:
 
         self.position = location
         self.battery -= 5
+        self._persist()
 
         return {
             "success": True,
@@ -253,6 +282,7 @@ class MockDrone:
         self.position = "base"
         self.battery -= 5
         self.status = "returning"
+        self._persist()
 
         return {
             "success": True,
@@ -273,6 +303,8 @@ class MockDrone:
             self.status = "available"
         else:
             self.status = "landed"
+
+        self._persist()
 
         return {
             "success": True,
