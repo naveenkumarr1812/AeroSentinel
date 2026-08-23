@@ -1135,7 +1135,7 @@ with st.sidebar:
     mission = st.text_area(
         "Mission Request",
         value="",
-        placeholder="e.g. Inspect the ground area for intrusions",
+        placeholder="e.g. Inspect the north gate for security vulnerabilities",
         height=100,
     )
 
